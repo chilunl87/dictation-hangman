@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Dictation Hangman</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 1rem;
+      background: #f9f9f9;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: #fff;
+      padding: 1rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    h1 { text-align: center; }
+    textarea, input[type="number"], input[type="text"], button {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      font-size: 1rem;
+    }
+textarea {
+  width: 100%;
+  height: 200px;    /* ← change this to make it taller/shorter */
+  padding: 0.5rem;
+  box-sizing: border-box;
+  font-size: 1rem;
+}
+    #game input[type="text"] { width: 50px; text-align: center; }
+    #hangmanCanvas {
+      display: block;
+      margin: 1rem auto;
+      background: #eef;
+      border: 1px solid #ccc;
+    }
+    @media (max-width: 400px) {
+      #game input[type="text"] { width: 100%; }
+    }
+    label { display: block; margin-top: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Dictation Hangman</h1>
+    <div id="setup">
+      <label for="paragraph">Enter your paragraph:</label>
+      <textarea id="paragraph">
+Jack and Jill went up the hill to fetch a pail of water. The quick brown fox jumps over the lazy dog. Hangman helps improve spelling and vocabulary.
+      </textarea>
+
+      <label for="minLength">Minimum word length (α≥):</label>
+      <input type="number" id="minLength" min="1" value="4"/>
+
+      <label for="maxLives">Number of lives:</label>
+      <input type="number" id="maxLives" min="1" value="6"/>
+
+      <button id="startBtn">Start Game</button>
+    </div>
+
+    <div id="game" style="display:none;">
+      <canvas id="hangmanCanvas" width="200" height="200"></canvas>
+
+      <p><strong>Guess the word:</strong></p>
+      <p id="wordDisplay" style="font-size:1.5rem;letter-spacing:0.2rem;"></p>
+
+      <p>Wrong guesses: <span id="wrongLetters"></span></p>
+      <p>Lives remaining: <span id="lives"></span></p>
+
+      <div>
+        <input type="text" id="letterInput" maxlength="1" placeholder="a"/>
+        <button id="guessBtn">Guess</button>
+      </div>
+
+      <button id="nextBtn" style="display:none; margin-top:1rem;">Next Word</button>
+    </div>
+  </div>
+
+  <script>
+    let gameWords = [], currentIndex = 0;
+    let word = '', answerArray = [], wrongLetters = [];
+    let maxLives = 6, lives = 6;
+
+    const canvas = document.getElementById('hangmanCanvas');
+    const ctx = canvas.getContext('2d');
+
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('guessBtn').addEventListener('click', guessLetter);
+    document.getElementById('nextBtn').addEventListener('click', nextWord);
+
+    function startGame() {
+      const text = document.getElementById('paragraph').value;
+      const minLen = parseInt(document.getElementById('minLength').value, 10) || 4;
+      maxLives = parseInt(document.getElementById('maxLives').value, 10) || 6;
+
+      // extract all words, filter by length
+      const all = text.match(/\b[A-Za-z]+\b/g) || [];
+      let words = all.filter(w => w.length >= minLen);
+      if (!words.length) {
+        alert(`No words of length ≥ ${minLen} found.`);
+        return;
+      }
+      // unique, lowercase, shuffle
+      words = [...new Set(words.map(w=>w.toLowerCase()))];
+      shuffle(words);
+
+      gameWords = words;
+      currentIndex = 0;
+      document.getElementById('setup').style.display = 'none';
+      document.getElementById('game').style.display = 'block';
+      setupWord();
+    }
+
+    function setupWord() {
+      word = gameWords[currentIndex];
+      answerArray = Array(word.length).fill('_');
+      wrongLetters = [];
+      lives = maxLives;
+      document.getElementById('guessBtn').disabled = false;
+      document.getElementById('letterInput').disabled = false;
+      document.getElementById('nextBtn').style.display = 'none';
+      initCanvas();
+      updateDisplay();
+    }
+
+    function updateDisplay() {
+      document.getElementById('wordDisplay').textContent = answerArray.join(' ');
+      document.getElementById('wrongLetters').textContent = wrongLetters.join(', ');
+      document.getElementById('lives').textContent = lives;
+      document.getElementById('letterInput').value = '';
+      document.getElementById('letterInput').focus();
+    }
+
+    function guessLetter() {
+      const inp = document.getElementById('letterInput');
+      const letter = inp.value.toLowerCase();
+      if (!letter.match(/^[a-z]$/)) return;
+      if (answerArray.includes(letter) || wrongLetters.includes(letter)) {
+        inp.value = '';
+        return;
+      }
+      if (word.includes(letter)) {
+        for (let i = 0; i < word.length; i++) {
+          if (word[i] === letter) answerArray[i] = letter;
+        }
+      } else {
+        wrongLetters.push(letter);
+        lives--;
+        drawHangman();
+      }
+      updateDisplay();
+      checkStatus();
+    }
+
+    function checkStatus() {
+      if (!answerArray.includes('_')) endRound(true);
+      else if (lives <= 0) endRound(false);
+    }
+
+    function endRound(won) {
+      document.getElementById('guessBtn').disabled = true;
+      document.getElementById('letterInput').disabled = true;
+      document.getElementById('nextBtn').style.display = 'inline';
+      if (!won) {
+        document.getElementById('wordDisplay').textContent = word.split('').join(' ');
+      }
+      setTimeout(()=>
+        alert(won 
+          ? `Well done! "${word.toUpperCase()}"` 
+          : `Out of lives! The word was "${word.toUpperCase()}".`),
+      50);
+    }
+
+    function nextWord() {
+      currentIndex++;
+      if (currentIndex >= gameWords.length) {
+        alert('No more words. Reload to start over.');
+        location.reload();
+      } else {
+        setupWord();
+      }
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    // Canvas setup & drawing
+    function initCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#000';
+      // base
+      ctx.beginPath();
+      ctx.moveTo(10,190); ctx.lineTo(190,190);
+      // pole & beam
+      ctx.moveTo(50,190); ctx.lineTo(50,20);
+      ctx.lineTo(120,20); ctx.lineTo(120,40);
+      ctx.stroke();
+    }
+
+    function drawHangman() {
+      const step = wrongLetters.length;
+      ctx.beginPath();
+      switch(step) {
+        case 1: // head
+          ctx.arc(120,60,20,0,Math.PI*2);
+          break;
+        case 2: // torso
+          ctx.moveTo(120,80); ctx.lineTo(120,130);
+          break;
+        case 3: // left arm
+          ctx.moveTo(120,90); ctx.lineTo(90,110);
+          break;
+        case 4: // right arm
+          ctx.moveTo(120,90); ctx.lineTo(150,110);
+          break;
+        case 5: // left leg
+          ctx.moveTo(120,130); ctx.lineTo(90,160);
+          break;
+        case 6: // right leg
+          ctx.moveTo(120,130); ctx.lineTo(150,160);
+          break;
+      }
+      ctx.stroke();
+    }
+  </script>
+</body>
+</html>
