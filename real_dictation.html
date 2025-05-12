@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dictation Game, Created by 思量爸爸</title>
+  <style>
+    * { box-sizing: border-box }
+    body { font-family: sans-serif; background: #f5f5f5; margin: 0; padding: 1rem }
+    .container { max-width: 600px; margin: auto; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1) }
+    h1 { text-align: center }
+    label { display: block; margin: 0.5rem 0 }
+    textarea, input[type="number"], input[type="text"] {
+      width: 100%; padding: 0.5rem; margin-top: 0.25rem; border: 1px solid #ccc; border-radius: 4px;
+    }
+    button {
+      display: inline-block; padding: 0.5rem 1rem; margin-top: 1rem;
+      border: none; background: #007bff; color: #fff; border-radius: 4px; cursor: pointer;
+    }
+    button:disabled { background: #ccc; cursor: default }
+    #blanks {
+      font-family: monospace; font-size: 1.5rem; letter-spacing: 0.5rem;
+      text-align: center; margin: 1rem 0; display: none;
+    }
+    #feedback { margin-top: 1rem; font-weight: bold; text-align: center }
+    @media (max-width: 480px) {
+      .container { padding: 1rem }
+      button { width: 100% }
+      #blanks { letter-spacing: 0.3rem; font-size: 1.2rem }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Dictation Game (UK)</h1>
+
+    <!-- Configuration Screen -->
+    <div id="config">
+      <label>
+        Paste your passage:
+        <textarea id="passage" rows="30">
+
+Do you know what your friends(friend) parents(parent) do
+Samuel and his parents(parent)
+Rocky
+What is your father job
+My father is a police officer
+He looks(look) smart in his uniform
+He has(have) a good helper
+They catch thieves(thief)
+They also go on patrol together and help keep the area safe
+This is my father and Rocky
+Rocky is a very clever police dog
+What is your mother job
+My mother is a shopkeeper
+She takes(take) care of a sweet shop
+I go to her shop to help her every Saturday
+She always gives(give) me sweets(sweet)
+
+Ella and her parents(parent)
+What do your parents(parent) do
+My father is a firefighter
+He puts(put) out fires(fire) and saves(save) people(person)
+He is very strong
+He can carry my mother on his back
+My mother is a nurse
+She works(work) at an animal hospital
+She helps(help) a vet
+They help sick animals(animal) together
+
+What does(do) a vet do
+
+Ted and his parents(parent)
+What are your parents(parent) jobs(job)
+My mother is a minibus driver
+She drives(drive) people(person) to different places(place)
+She goes(go) to work by minibus too
+My father is an ice cream taster
+He tastes(taste) flavours(flavour) of ice cream every day
+I want to be an ice cream taster when I grow up    
+
+</textarea>
+      </label>
+      <label>
+        Minimum word length:
+        <input type="number" id="minLen" value="4" min="1"/>
+      </label>
+      <label>
+        Number of words to test:
+        <input type="number" id="numWords" value="5" min="1"/>
+      </label>
+      <button id="startBtn">Start Game</button>
+      <p style="font-size:.9em; color:#555; margin-top:.5rem;">
+        (Words shorter than the minimum will be ignored.)
+      </p>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game" style="display:none;">
+      <p id="progress"></p>
+      <button id="pronounceBtn">🔊 Pronounce Word</button>
+      <button id="hintBtn">💡 Hint</button>
+      <div id="blanks"></div>
+      <form id="spellForm">
+        <label>
+          Your spelling:
+          <input type="text" id="answer" autocomplete="off" required/>
+        </label>
+        <button type="submit" id="submitBtn">Submit</button>
+      </form>
+      <button id="nextBtn" style="display:none;">Next</button>
+      <p id="feedback"></p>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="result" style="display:none; text-align:center;">
+      <p id="score"></p>
+      <button id="restartBtn">Restart</button>
+    </div>
+  </div>
+
+  <script>
+    // Elements
+    const configEl     = document.getElementById('config');
+    const startBtn     = document.getElementById('startBtn');
+    const passageEl    = document.getElementById('passage');
+    const minLenEl     = document.getElementById('minLen');
+    const numWordsEl   = document.getElementById('numWords');
+
+    const gameEl       = document.getElementById('game');
+    const progressEl   = document.getElementById('progress');
+    const pronounceBtn = document.getElementById('pronounceBtn');
+    const hintBtn      = document.getElementById('hintBtn');
+    const blanksEl     = document.getElementById('blanks');
+    const spellForm    = document.getElementById('spellForm');
+    const answerEl     = document.getElementById('answer');
+    const submitBtn    = document.getElementById('submitBtn');
+    const nextBtn      = document.getElementById('nextBtn');
+    const feedbackEl   = document.getElementById('feedback');
+
+    const resultEl     = document.getElementById('result');
+    const scoreEl      = document.getElementById('score');
+    const restartBtn   = document.getElementById('restartBtn');
+
+    // State
+    let words = [], index = 0, correctCount = 0;
+
+    // Shuffle helper
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    // Start game
+    startBtn.addEventListener('click', () => {
+      const text   = passageEl.value.trim();
+      const minLen = parseInt(minLenEl.value, 10);
+      let numW     = parseInt(numWordsEl.value, 10);
+      if (!text || isNaN(minLen) || minLen < 1 || isNaN(numW) || numW < 1) {
+        alert('Please paste text and enter valid numbers.');
+        return;
+      }
+      // extract words ≥ minLen
+      const all = text.match(new RegExp(`\\b\\w{${minLen},}\\b`, 'g')) || [];
+      if (!all.length) {
+        alert(`No words of length ≥${minLen} found.`);
+        return;
+      }
+      shuffle(all);
+      if (all.length < numW) {
+        numW = all.length;
+        alert(`Only ${all.length} words available; testing all of them.`);
+      }
+      words = all.slice(0, numW);
+      index = 0;
+      correctCount = 0;
+
+      // show game
+      configEl.style.display = 'none';
+      resultEl.style.display = 'none';
+      gameEl.style.display   = 'block';
+      feedbackEl.textContent = '';
+      blanksEl.style.display = 'none';
+      nextBtn.style.display  = 'none';
+      submitBtn.disabled     = false;
+      answerEl.disabled      = false;
+
+      updateProgress();
+    });
+
+    // Update progress
+    function updateProgress() {
+      progressEl.textContent = `Word ${index + 1} of ${words.length}`;
+      answerEl.value = '';
+      answerEl.focus();
+      blanksEl.style.display = 'none';
+    }
+
+    // Pronounce with UK accent
+    pronounceBtn.addEventListener('click', () => {
+      const msg = new SpeechSynthesisUtterance(words[index]);
+      msg.lang = 'en-GB';
+      speechSynthesis.speak(msg);
+    });
+
+    // Hint: show blanks
+    hintBtn.addEventListener('click', () => {
+      const len = words[index].length;
+      blanksEl.textContent = Array(len).fill('_').join(' ');
+      blanksEl.style.display = 'block';
+      answerEl.focus();
+    });
+
+    // Submit spelling
+    spellForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const user    = answerEl.value.trim().toLowerCase();
+      const correct = words[index].toLowerCase();
+      if (user === correct) {
+        feedbackEl.textContent = '✅ Correct!';
+        correctCount++;
+      } else {
+        feedbackEl.textContent = `❌ Incorrect. Correct: "${words[index]}"`;
+      }
+      submitBtn.disabled = true;
+      answerEl.disabled  = true;
+      nextBtn.textContent = index + 1 < words.length ? 'Next' : 'Show Results';
+      nextBtn.style.display = 'inline-block';
+    });
+
+    // Next / Show Results
+    nextBtn.addEventListener('click', () => {
+      index++;
+      if (index < words.length) {
+        feedbackEl.textContent = '';
+        updateProgress();
+        submitBtn.disabled = false;
+        answerEl.disabled  = false;
+        nextBtn.style.display = 'none';
+        // auto-pronounce next
+        const msg = new SpeechSynthesisUtterance(words[index]);
+        msg.lang = 'en-GB';
+        speechSynthesis.speak(msg);
+      } else {
+        gameEl.style.display   = 'none';
+        resultEl.style.display = 'block';
+        scoreEl.textContent    = `You got ${correctCount} of ${words.length} correct.`;
+      }
+    });
+
+    // Restart
+    restartBtn.addEventListener('click', () => {
+      passageEl.value  = '';
+      minLenEl.value   = 4;
+      numWordsEl.value = 10;
+      configEl.style.display = 'block';
+      resultEl.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
